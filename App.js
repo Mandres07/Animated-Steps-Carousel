@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { StyleSheet, Text, View, FlatList, Animated, Image, Dimensions, SafeAreaView, TouchableOpacity } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import DATA from './data';
@@ -12,7 +12,7 @@ const CIRCLE_INITIAL = 70;
 const BackImage = ({ scrollX }) => {
 
    return (
-      <View style={{ position: 'absolute', top: 0, alignItems: 'center' }}>
+      <View style={{ zIndex: 3, position: 'absolute', top: 0, alignItems: 'center' }}>
          {DATA.map((item, index) => {
             const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
             const scale = scrollX.interpolate({
@@ -42,8 +42,21 @@ const BackImage = ({ scrollX }) => {
 };
 
 const Pagination = ({ scrollX }) => {
+   const index = Animated.modulo(Animated.divide(scrollX, width), width);
+   const inputRange = [0, 1, 2];
+
+   const dotWidth = index.interpolate({
+      inputRange,
+      outputRange: [DOT_SIZE, DOT_SIZE * 3, DOT_SIZE * 5],
+   });
+
+   const translateX = index.interpolate({
+      inputRange,
+      outputRange: [-DOT_SIZE * 2, -DOT_SIZE, 0],
+   });
+
    return (
-      <View style={{ justifyContent: 'center', alignItems: 'center', marginTop: 20 }}>
+      <View style={{ zIndex: 2, justifyContent: 'center', alignItems: 'center', marginTop: 20 }}>
          <View style={{ flexDirection: 'row' }}>
             {DATA.map((item, index) => {
                return (
@@ -51,7 +64,7 @@ const Pagination = ({ scrollX }) => {
                );
             })}
          </View>
-         <View style={{ position: 'absolute', backgroundColor: 'black', width: DOT_SIZE, height: DOT_SIZE, borderRadius: DOT_SIZE }} />
+         <Animated.View style={{ position: 'absolute', backgroundColor: 'black', width: dotWidth, height: DOT_SIZE, borderRadius: DOT_SIZE, transform: [{ translateX }] }} />
       </View>
    );
 };
@@ -80,40 +93,77 @@ const Item = ({ item, scrollX, index }) => {
    );
 };
 
-const Arrows = ({ scrollX, index }) => {
-   return (
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', position: 'absolute', bottom: 80, width, paddingHorizontal: 50 }}>
-         <View>
-            <TouchableOpacity>
-               <AntDesign name="arrowleft" size={30} color="black" />
-            </TouchableOpacity>
-         </View>
-         <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-            <View style={{ position: 'absolute', backgroundColor: 'gold', width: CIRCLE_INITIAL, height: CIRCLE_INITIAL, borderRadius: CIRCLE_INITIAL / 2 }} />
-            <TouchableOpacity>
-               <AntDesign name="arrowright" size={30} color="black" />
-            </TouchableOpacity>
-         </View>
-      </View>
-   );
-};
-
 export default App = () => {
    const scrollX = useRef(new Animated.Value(0)).current;
+   const [index, setIndex] = useState(0);
+   const ref = useRef();
+
+   const onBackward = () => {
+      ref?.current?.scrollToOffset({
+         offset: (index - 1) * width,
+         animated: true
+      });
+   };
+   const onForward = () => {
+      ref?.current?.scrollToOffset({
+         offset: (index + 1) * width,
+         animated: true
+      });
+   };
+
    return (
-      <View style={styles.container}>
+      <View style={{ ...styles.container }}>
          <StatusBar style="auto" />
          <BackImage scrollX={scrollX} />
-         <View style={{ alignItems: 'center', justifyContent: 'flex-start', position: 'absolute', top: height / 2, height: height / 2 }}>
-            <Pagination />
-            <Animated.FlatList keyExtractor={item => item.id} data={DATA} pagingEnabled horizontal bounces={false} showsHorizontalScrollIndicator={false} style={{ marginTop: 30 }}
-               onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true })} scrollEventThrottle={16}
-               renderItem={({ item, index }) => {
-                  return (
-                     <Item key={item.id} item={item} scrollX={scrollX} index={index} />
-                  );
-               }} />
-            <Arrows />
+         <View style={{ alignItems: 'center', position: 'absolute', top: height / 2, height: height / 2 }}>
+            <Pagination scrollX={scrollX} />
+            <View style={{ flex: 1, zIndex: 5 }}>
+               <Animated.FlatList ref={ref} style={{ marginTop: 30, }} keyExtractor={item => item.id} data={DATA} pagingEnabled horizontal bounces={false} showsHorizontalScrollIndicator={false}
+                  onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: false })}
+                  onMomentumScrollEnd={ev => {
+                     const newIndex = Math.floor(ev.nativeEvent.contentOffset.x / width);
+                     setIndex(newIndex);
+                  }}
+                  renderItem={({ item, index }) => {
+                     return (
+                        <Item key={item.id} item={item} scrollX={scrollX} index={index} />
+                     );
+                  }} />
+            </View>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+               <View style={{ flexDirection: 'row', justifyContent: 'space-between', position: 'absolute', bottom: 80, width, paddingHorizontal: 50 }}>
+                  <View style={{ zIndex: 4 }}>
+                     <TouchableOpacity disabled={index === 0} style={{ opacity: index === 0 ? 0 : 1 }} onPress={onBackward}>
+                        <AntDesign name="arrowleft" size={30} color="black" />
+                     </TouchableOpacity>
+                  </View>
+                  <View style={{ justifyContent: 'center', alignItems: 'center' }}>
+                     {DATA.map((item, activeIndex) => {
+                        const inputRange = [(activeIndex - 2) * width, (activeIndex - 1) * width, activeIndex * width, (activeIndex + 1) * width, (activeIndex + 2) * width];
+                        const scale = scrollX.interpolate({
+                           inputRange,
+                           outputRange: [1, 1, 1, 25, 25]
+                        });
+                        const opacity = scrollX.interpolate({
+                           inputRange,
+                           outputRange: [0, 0, 1, 1, 0]
+                        });
+
+                        return (
+                           <Animated.View key={activeIndex + 'circle'}
+                              style={{
+                                 transform: [{ scale }], position: 'absolute', backgroundColor: activeIndex % 2 === 0 ? 'gold' : 'white', opacity,
+                                 width: CIRCLE_INITIAL, height: CIRCLE_INITIAL, borderRadius: CIRCLE_INITIAL / 2
+                              }}
+                           />
+                        );
+                     })}
+                     <TouchableOpacity onPress={onForward}>
+                        <AntDesign name="arrowright" size={30} color="black" />
+                     </TouchableOpacity>
+                  </View>
+               </View>
+            </View>
          </View>
       </View>
    );
